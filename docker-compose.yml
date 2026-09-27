@@ -1,0 +1,13 @@
+services:
+  app:
+    build: .
+    ports:
+      - "3100:3100"
+    environment:
+      DATABASE_URL: "file:/data/ascendium.db"
+    volumes:
+      # Initialised from the seeded database baked into the image on first run.
+      - ascendium-data:/data
+
+volumes:
+  ascendium-data:

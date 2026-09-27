@@ -1,0 +1,908 @@
+// Ascendium One — institutional data model
+// Multi-tenant from day one: every entity carries organisationId.
+// SQLite-compatible (no enums — domain values are string unions enforced in
+// src/lib/domain.ts). Switching to PostgreSQL requires only DATABASE_URL.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// Tenancy & organisation structure
+// ---------------------------------------------------------------------------
+
+model Organisation {
+  id          String   @id @default(uuid())
+  name        String
+  legalName   String?
+  tagline     String?
+  mission     String?
+  vision      String?
+  foundedYear Int?
+  isDemo      Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  deletedAt   DateTime?
+
+  clusters     Cluster[]
+  subsidiaries Subsidiary[]
+  departments  Department[]
+  teams        Team[]
+  users        User[]
+  projects     Project[]
+  tasks        Task[]
+  objectives   Objective[]
+  kpis         Kpi[]
+  metrics      Metric[]
+  documents    Document[]
+  knowledge    KnowledgeItem[]
+  meetings     Meeting[]
+  decisions    Decision[]
+  approvals    Approval[]
+  risks        Risk[]
+  issues       Issue[]
+  incidents    Incident[]
+  opportunities Opportunity[]
+  channels     Channel[]
+  messages     Message[]
+  notifications Notification[]
+  announcements Announcement[]
+  auditEvents  AuditEvent[]
+  aiInteractions AIInteraction[]
+  workflows    Workflow[]
+  workflowInstances WorkflowInstance[]
+  roles        Role[]
+}
+
+model Cluster {
+  id             String        @id @default(uuid())
+  organisationId String
+  name           String
+  slug           String
+  description    String?
+  sortOrder      Int           @default(0)
+  isDemo         Boolean       @default(false)
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+  deletedAt      DateTime?
+
+  organisation Organisation @relation(fields: [organisationId], references: [id])
+  subsidiaries Subsidiary[]
+
+  @@unique([organisationId, slug])
+}
+
+model Subsidiary {
+  id             String   @id @default(uuid())
+  organisationId String
+  clusterId      String?
+  name           String
+  slug           String
+  description    String?
+  sector         String?
+  website        String?
+  status         String   @default("active") // active | archived
+  isDemo         Boolean  @default(false)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  deletedAt      DateTime?
+
+  organisation Organisation @relation(fields: [organisationId], references: [id])
+  cluster      Cluster?     @relation(fields: [clusterId], references: [id])
+  departments  Department[]
+  teams        Team[]
+  users        User[]
+  projects     Project[]
+  tasks        Task[]
+  objectives   Objective[]
+  kpis         Kpi[]
+  metrics      Metric[]
+  documents    Document[]
+  meetings     Meeting[]
+  decisions    Decision[]
+  approvals    Approval[]
+  risks        Risk[]
+  issues       Issue[]
+  incidents    Incident[]
+  opportunities Opportunity[]
+
+  @@unique([organisationId, slug])
+}
+
+model Department {
+  id             String   @id @default(uuid())
+  organisationId String
+  subsidiaryId   String?
+  name           String
+  slug           String
+  mission        String?
+  headId         String?  @unique
+  budgetCents    BigInt   @default(0)
+  isDemo         Boolean  @default(false)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  deletedAt      DateTime?
+
+  organisation Organisation @relation(fields: [organisationId], references: [id])
+  subsidiary   Subsidiary?  @relation(fields: [subsidiaryId], references: [id])
+  head         User?        @relation("DepartmentHead", fields: [headId], references: [id])
+  teams        Team[]
+  users        User[]
+  projects     Project[]
+  tasks        Task[]
+  kpis         Kpi[]
+  objectives   Objective[]
+  documents    Document[]
+  meetings     Meeting[]
+  decisions    Decision[]
+  risks        Risk[]
+
+  @@unique([organisationId, subsidiaryId, slug])
+}
+
+model Team {
+  id             String   @id @default(uuid())
+  organisationId String
+  departmentId   String?
+  subsidiaryId   String?
+  name           String
+  isDemo         Boolean  @default(false)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  deletedAt      DateTime?
+
+  organisation Organisation @relation(fields: [organisationId], references: [id])
+  department   Department?  @relation(fields: [departmentId], references: [id])
+  subsidiary   Subsidiary?  @relation(fields: [subsidiaryId], references: [id])
+  users        User[]
+  projects     Project[]
+}
+
+// ---------------------------------------------------------------------------
+// Identity & access
+// ---------------------------------------------------------------------------
+
+model User {
+  id             String    @id @default(uuid())
+  organisationId String
+  subsidiaryId   String?
+  departmentId   String?
+  teamId         String?
+  managerId      String?
+  roleId         String?
+  email          String    @unique
+  passwordHash   String
+  firstName      String
+  lastName       String
+  title          String?
+  location       String?
+  phone          String?
+  avatarHue      Int       @default(217)
+  isExecutive    Boolean   @default(false)
+  isAdmin        Boolean   @default(false)
+  isActive       Boolean   @default(true)
+  mfaEnabled     Boolean   @default(false)
+  lastLoginAt    DateTime?
+  isDemo         Boolean   @default(false)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  deletedAt      DateTime?
+
+  organisation Organisation  @relation(fields: [organisationId], references: [id])
+  subsidiary   Subsidiary?   @relation(fields: [subsidiaryId], references: [id])
+  department   Department?   @relation(fields: [departmentId], references: [id])
+  team         Team?         @relation(fields: [teamId], references: [id])
+  manager      User?         @relation("Reports", fields: [managerId], references: [id])
+  reports      User[]        @relation("Reports")
+  role         Role?         @relation(fields: [roleId], references: [id])
+  headedDepartment Department? @relation("DepartmentHead")
+
+  skills             UserSkill[]
+  sessions           Session[]
+  tasksOwned         Task[]        @relation("TaskOwner")
+  tasksCreated       Task[]        @relation("TaskCreator")
+  taskComments       TaskComment[]
+  projectMemberships ProjectMember[]
+  objectiveOwners    Objective[]   @relation("ObjectiveOwner")
+  kpiOwners          Kpi[]         @relation("KpiOwner")
+  documents          Document[]    @relation("DocumentOwner")
+  documentApprovals  Document[]    @relation("DocumentApprover")
+  knowledge          KnowledgeItem[]
+  meetings           MeetingAttendee[]
+  meetingsOwned      Meeting[]     @relation("MeetingOwner")
+  decisionsOwned     Decision[]    @relation("DecisionOwner")
+  approvalsRequested Approval[]    @relation("ApprovalRequester")
+  approvalsDecided   Approval[]    @relation("ApprovalDecider")
+  risksOwned         Risk[]        @relation("RiskOwner")
+  issues             Issue[]
+  opportunities      Opportunity[]
+  messages           Message[]
+  notifications      Notification[]
+  announcements      Announcement[]
+  aiInteractions     AIInteraction[]
+  loginEvents        LoginEvent[]
+
+  @@index([organisationId, subsidiaryId])
+  @@index([organisationId, departmentId])
+}
+
+model Role {
+  id             String   @id @default(uuid())
+  organisationId String?
+  code           String   @unique
+  name           String
+  level          String   // group | subsidiary | department | system
+  description    String?
+  isSystem       Boolean  @default(false)
+  permissions    String   @default("[]") // JSON array of "resource:action:level"
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organisation Organisation? @relation(fields: [organisationId], references: [id])
+  users        User[]
+
+  @@index([organisationId])
+}
+
+model UserSkill {
+  id     String @id @default(uuid())
+  userId String
+  skill  String
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@unique([userId, skill])
+}
+
+model Session {
+  id        String   @id @default(uuid())
+  userId    String
+  tokenHash String   @unique
+  userAgent String?
+  ip        String?
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+}
+
+model LoginEvent {
+  id        String   @id @default(uuid())
+  userId    String?
+  email     String
+  success   Boolean
+  reason    String?
+  ip        String?
+  userAgent String?
+  createdAt DateTime @default(now())
+
+  user User? @relation(fields: [userId], references: [id])
+}
+
+// ---------------------------------------------------------------------------
+// Strategy, KPIs & performance
+// ---------------------------------------------------------------------------
+
+model Objective {
+  id             String   @id @default(uuid())
+  organisationId String
+  subsidiaryId   String?
+  departmentId   String?
+  parentId       String?
+  ownerId        String?
+  title          String
+  description    String?
+  level          String   // group | cluster | subsidiary | department | individual
+  horizon        String   @default("annual") // quarterly | annual | multiyear
+  status         String   @default("on_track") // on_track | at_risk | off_track | achieved | paused
+  progressPct    Int      @default(0)
+  dueDate        DateTime?
+  isDemo         Boolean  @default(false)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  deletedAt      DateTime?
+
+  organisation Organisation @relation(fields: [organisationId], references: [id])
+  subsidiary   Subsidiary?  @relation(fields: [subsidiaryId], references: [id])
+  department   Department?  @relation(fields: [departmentId], references: [id])
+  parent       Objective?   @relation("ObjectiveTree", fields: [parentId], references: [id])
+  children     Objective[]  @relation("ObjectiveTree")
+  owner        User?        @relation("ObjectiveOwner", fields: [ownerId], references: [id])
+  kpis         Kpi[]
+  keyResults   KeyResult[]
+
+  @@index([organisationId, level])
+}
+
+model KeyResult {
+  id          String   @id @default(uuid())
+  objectiveId String
+  title       String
+  targetValue Float
+  currentValue Float   @default(0)
+  unit        String   @default("")
+  dueDate     DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  objective Objective @relation(fields: [objectiveId], references: [id])
+}
+
+model Kpi {
+  id             String   @id @default(uuid())
+  organisationId String
+  subsidiaryId   String?
+  departmentId   String?
+  objectiveId    String?
+  ownerId        String?
+  name           String
+  description    String?
+  category       String   // financial | operational | strategic | customer | employee | project | learning | compliance | sustainability
+  unit           String   @default("")
+  direction      String   @default("up") // up | down
+  standard       Boolean  @default(false) // group-wide standard
+  isDemo         Boolean  @default(false)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  deletedAt      DateTime?
+
+  organisation Organisation @relation(fields: [organisationId], references: [id])
+  subsidiary   Subsidiary?  @relation(fields: [subsidiaryId], references: [id])
+  department   Department? @relation(fields: [departmentId], references: [id])
+  objective    Objective? @relation(fields: [objectiveId], references: [id])
+  owner        User?        @relation("KpiOwner", fields: [ownerId], references: [id])
+  values       Metric[]
+
+  @@index([organisationId, category])
+}
+
+model Metric {
+  id             String   @id @default(uuid())
+  organisationId String
+  kpiId          String?
+  subsidiaryId   String?
+  period         String   // e.g. "2026-09"
+  value          Float
+  target         Float?
+  note           String?
+  isDemo         Boolean  @default(false)
+  createdAt      DateTime @default(now())
+
+  organisation Organisation @relation(fields: [organisationId], references: [id])
+  kpi          Kpi?         @relation(fields: [kpiId], references: [id])
+  subsidiary   Subsidiary?  @relation(fields: [subsidiaryId], references: [id])
+
+  @@unique([kpiId, subsidiaryId, period])
+}
+
+// ---------------------------------------------------------------------------
+// Execution: projects & tasks
+// ---------------------------------------------------------------------------
+
+model Project {
+  id             String   @id @default(uuid())
+  organisationId String
+  subsidiaryId   String?
+  departmentId   String?
+  teamId         String?
+  code           String?
+  name           String
+  description    String?
+  status         String   @default("planning") // planning | active | on_hold | completed | cancelled
+  priority       String   @default("medium") // low | medium | high | critical
+  health         String   @default("green") // green | amber | red
+  progressPct    Int      @default(0)
+  budgetCents    BigInt   @default(0)
+  spentCents     BigInt   @default(0)
+  startDate      DateTime?
+  dueDate        DateTime?
+  isCrossSubsidiary Boolean @default(false)
+  isDemo         Boolean  @default(false)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  deletedAt      DateTime?
+
+  organisation Organisation @relation(fields: [organisationId], references: [id])
+  subsidiary   Subsidiary?  @relation(fields: [subsidiaryId], references: [id])
+  department   Department?  @relation(fields: [departmentId], references: [id])
+  team         Team?        @relation(fields: [teamId], references: [id])
+  members      ProjectMember[]
+  tasks        Task[]
+  documents    Document[]
+  meetings     Meeting[]
+  decisions    Decision[]
+  risks        Risk[]
+  approvals    Approval[]
+
+  @@unique([organisationId, code])
+}
+
+model ProjectMember {
+  id        String @id @default(uuid())
+  projectId String
+  userId    String
+  role      String @default("member")
+
+  project Project @relation(fields: [projectId], references: [id])
+  user    User    @relation(fields: [userId], references: [id])
+
+  @@unique([projectId, userId])
+}
+
+model Task {
+  id             String    @id @default(uuid())
+  organisationId String
+  subsidiaryId   String?
+  departmentId   String?
+  projectId      String?
+  ownerId        String?
+  creatorId      String?
+  title          String
+  description    String?
+  status         String    @default("todo") // todo | in_progress | blocked | review | done | cancelled
+  priority       String    @default("medium")
+  dueDate        DateTime?
+  completedAt    DateTime?
+  requiresApproval Boolean @default(false)
+  approvedAt     DateTime?
+  isDemo         Boolean   @default(false)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  deletedAt      DateTime?
+
+  organisation Organisation @relation(fields: [organisationId], references: [id])
+  subsidiary   Subsidiary?  @relation(fields: [subsidiaryId], references: [id])
+  department   Department?  @relation(fields: [departmentId], references: [id])
+  project      Project?     @relation(fields: [projectId], references: [id])
+  owner        User?        @relation("TaskOwner", fields: [ownerId], references: [id])
+  creator      User?        @relation("TaskCreator", fields: [creatorId], references: [id])
+  comments     TaskComment[]
+
+  @@index([organisationId, ownerId, status])
+  @@index([organisationId, dueDate])
+}
+
+model TaskComment {
+  id        String   @id @default(uuid())
+  taskId    String
+  authorId  String
+  body      String
+  createdAt DateTime @default(now())
+
+  task   Task @relation(fields: [taskId], references: [id])
+  author User @relation(fields: [authorId], references: [id])
+}
+
+// ---------------------------------------------------------------------------
+// Knowledge & documents
+// ---------------------------------------------------------------------------
+
+model Document {
+  id             String   @id @default(uuid())
+  organisationId String
+  subsidiaryId   String?
+  departmentId   String?
+  projectId      String?
+  ownerId        String?
+  approvedById   String?
+  title          String
+  docType        String   @default("note") // policy | contract | report | presentation | note | minutes | brief
+  body           String   @default("")
+  mimeType       String?
+  fileSize       Int?
+  storagePath    String?
+  version        Int      @default(1)
+  status         String   @default("draft") // draft | in_review | published | archived
+  tags           String   @default("[]") // JSON array
+  isDemo         Boolean  @default(false)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  deletedAt      DateTime?
+
+  organisation Organisation @relation(fields: [organisationId], references: [id])
+  subsidiary   Subsidiary?  @relation(fields: [subsidiaryId], references: [id])
+  department   Department?  @relation(fields: [departmentId], references: [id])
+  project      Project?    @relation(fields: [projectId], references: [id])
+  owner        User?       @relation("DocumentOwner", fields: [ownerId], references: [id])
+  approvedBy   User?       @relation("DocumentApprover", fields: [approvedById], references: [id])
+  versions     DocumentVersion[]
+
+  @@index([organisationId, docType, status])
+}
+
+model DocumentVersion {
+  id         String   @id @default(uuid())
+  documentId String
+  version    Int
+  body       String
+  createdBy  String?
+  createdAt  DateTime @default(now())
+
+  document Document @relation(fields: [documentId], references: [id])
+
+  @@unique([documentId, version])
+}
+
+model KnowledgeItem {
+  id             String   @id @default(uuid())
+  organisationId String
+  authorId       String?
+  title          String
+  body           String
+  tags           String   @default("[]")
+  source         String? // e.g. "meeting", "decision", "import"
+  sourceId       String?
+  isDemo         Boolean  @default(false)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organisation Organisation @relation(fields: [organisationId], references: [id])
+  author       User?        @relation(fields: [authorId], references: [id])
+}
+
+// ---------------------------------------------------------------------------
+// Meetings & communication
+// ---------------------------------------------------------------------------
+
+model Meeting {
+  id             String   @id @default(uuid())
+  organisationId String
+  subsidiaryId   String?
+  departmentId   String?
+  projectId      String?
+  ownerId        String?
+  title          String
+  purpose        String?
+  startsAt       DateTime
+  endsAt         DateTime?
+  location       String?
+  agenda         String   @default("")
+  notes          String   @default("")
+  aiSummary      String?
+  status         String   @default("scheduled") // scheduled | live | completed | cancelled
+  isDemo         Boolean  @default(false)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organisation Organisation @relation(fields: [organisationId], references: [id])
+  subsidiary   Subsidiary?  @relation(fields: [subsidiaryId], references: [id])
+  department   Department?  @relation(fields: [departmentId], references: [id])
+  project      Project?    @relation(fields: [projectId], references: [id])
+  owner        User?        @relation("MeetingOwner", fields: [ownerId], references: [id])
+  attendees    MeetingAttendee[]
+  actionItems  MeetingActionItem[]
+}
+
+model MeetingAttendee {
+  id       String @id @default(uuid())
+  meetingId String
+  userId   String
+  rsvp     String @default("pending") // pending | accepted | declined
+
+  meeting Meeting @relation(fields: [meetingId], references: [id])
+  user    User    @relation(fields: [userId], references: [id])
+
+  @@unique([meetingId, userId])
+}
+
+model MeetingActionItem {
+  id        String   @id @default(uuid())
+  meetingId String
+  assigneeId String?
+  body      String
+  dueDate   DateTime?
+  done      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  meeting Meeting @relation(fields: [meetingId], references: [id])
+}
+
+model Channel {
+  id             String   @id @default(uuid())
+  organisationId String
+  subsidiaryId   String?
+  departmentId   String?
+  projectId      String?
+  name           String
+  topic          String?
+  kind           String   @default("team") // direct | team | subsidiary | executive | group
+  isDemo         Boolean  @default(false)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organisation Organisation @relation(fields: [organisationId], references: [id])
+  messages     Message[]
+
+  @@unique([organisationId, name])
+}
+
+model Message {
+  id             String   @id @default(uuid())
+  organisationId String
+  channelId      String
+  authorId       String?
+  body           String
+  attachments    String   @default("[]")
+  isDemo         Boolean  @default(false)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  deletedAt      DateTime?
+
+  organisation Organisation @relation(fields: [organisationId], references: [id])
+  channel      Channel      @relation(fields: [channelId], references: [id])
+  author       User?        @relation(fields: [authorId], references: [id])
+}
+
+model Announcement {
+  id             String   @id @default(uuid())
+  organisationId String
+  authorId       String?
+  title          String
+  body           String
+  audience       String   @default("group") // group | cluster | subsidiary | department
+  audienceId     String?
+  pinned         Boolean  @default(false)
+  isDemo         Boolean  @default(false)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organisation Organisation @relation(fields: [organisationId], references: [id])
+  author       User?        @relation(fields: [authorId], references: [id])
+}
+
+model Notification {
+  id             String   @id @default(uuid())
+  organisationId String
+  userId         String
+  kind           String   // approval | task | risk | decision | announcement | security | mention
+  severity       String   @default("info") // critical | important | info
+  title          String
+  body           String?
+  link           String?
+  isDemo         Boolean  @default(false)
+  readAt         DateTime?
+  createdAt      DateTime @default(now())
+
+  organisation Organisation @relation(fields: [organisationId], references: [id])
+  user         User         @relation(fields: [userId], references: [id])
+
+  @@index([userId, readAt])
+}
+
+// ---------------------------------------------------------------------------
+// Decisions, approvals & governance
+// ---------------------------------------------------------------------------
+
+model Decision {
+  id             String   @id @default(uuid())
+  organisationId String
+  subsidiaryId   String?
+  departmentId   String?
+  projectId      String?
+  ownerId        String?
+  title          String
+  context        String   @default("")
+  problem        String   @default("")
+  options        String   @default("[]") // JSON array
+  evidence       String   @default("")
+  financialImplication String?
+  riskAssessment String?
+  strategicAlignment String?
+  dependencies   String   @default("")
+  recommendation String?
+  authority      String?  // who has approval authority
+  status         String   @default("open") // open | decided | approved | rejected | superseded
+  decidedAt      DateTime?
+  rationale      String?
+  deadline       DateTime?
+  aiAssisted     Boolean  @default(false)
+  isDemo         Boolean  @default(false)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  deletedAt      DateTime?
+
+  organisation Organisation @relation(fields: [organisationId], references: [id])
+  subsidiary   Subsidiary?  @relation(fields: [subsidiaryId], references: [id])
+  department   Department?  @relation(fields: [departmentId], references: [id])
+  project      Project?     @relation(fields: [projectId], references: [id])
+  owner        User?        @relation("DecisionOwner", fields: [ownerId], references: [id])
+}
+
+model Approval {
+  id             String   @id @default(uuid())
+  organisationId String
+  subsidiaryId   String?
+  projectId      String?
+  requesterId    String?
+  approverId     String?
+  kind           String   // budget | hiring | procurement | contract | strategic | project | policy | capital | risk_acceptance
+  title          String
+  detail         String   @default("")
+  financialImpactCents BigInt?
+  riskNote       String?
+  evidence       String   @default("")
+  status         String   @default("pending") // pending | approved | rejected | changes_requested
+  decidedAt      DateTime?
+  decisionNote   String?
+  deadline       DateTime?
+  isDemo         Boolean  @default(false)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organisation Organisation @relation(fields: [organisationId], references: [id])
+  subsidiary   Subsidiary?  @relation(fields: [subsidiaryId], references: [id])
+  project      Project?     @relation(fields: [projectId], references: [id])
+  requester    User?        @relation("ApprovalRequester", fields: [requesterId], references: [id])
+  approver     User?        @relation("ApprovalDecider", fields: [approverId], references: [id])
+}
+
+model Risk {
+  id             String   @id @default(uuid())
+  organisationId String
+  subsidiaryId   String?
+  departmentId   String?
+  projectId      String?
+  ownerId        String?
+  title          String
+  description    String?
+  category       String   @default("operational") // financial | operational | strategic | compliance | cyber | legal | reputational | safety
+  probability    Int      @default(3) // 1-5
+  impact         Int      @default(3) // 1-5
+  mitigation     String   @default("")
+  status         String   @default("open") // open | mitigating | accepted | closed
+  escalationLevel String  @default("department") // department | subsidiary | group | board
+  reviewDate     DateTime?
+  evidence       String   @default("")
+  isDemo         Boolean  @default(false)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  deletedAt      DateTime?
+
+  organisation Organisation @relation(fields: [organisationId], references: [id])
+  subsidiary   Subsidiary?  @relation(fields: [subsidiaryId], references: [id])
+  department   Department?  @relation(fields: [departmentId], references: [id])
+  project      Project?     @relation(fields: [projectId], references: [id])
+  owner        User?        @relation("RiskOwner", fields: [ownerId], references: [id])
+}
+
+model Issue {
+  id             String   @id @default(uuid())
+  organisationId String
+  subsidiaryId   String?
+  ownerId        String?
+  title          String
+  description    String?
+  severity       String   @default("medium") // low | medium | high | critical
+  status         String   @default("reported") // reported | assigned | investigating | escalated | resolved
+  isDemo         Boolean  @default(false)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organisation Organisation @relation(fields: [organisationId], references: [id])
+  subsidiary   Subsidiary?  @relation(fields: [subsidiaryId], references: [id])
+  owner        User?        @relation(fields: [ownerId], references: [id])
+}
+
+model Incident {
+  id             String   @id @default(uuid())
+  organisationId String
+  subsidiaryId   String?
+  kind           String   // cybersecurity | operational | financial | legal | infrastructure | reputational | safety
+  title          String
+  description    String?
+  severity       String   @default("high") // low | medium | high | critical
+  status         String   @default("active") // active | contained | resolved | closed
+  responseTeam   String   @default("[]") // JSON array of names
+  timeline       String   @default("[]") // JSON array of {at, event}
+  isDemo         Boolean  @default(false)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organisation Organisation @relation(fields: [organisationId], references: [id])
+  subsidiary   Subsidiary?  @relation(fields: [subsidiaryId], references: [id])
+}
+
+model Opportunity {
+  id             String   @id @default(uuid())
+  organisationId String
+  subsidiaryId   String?
+  ownerId        String?
+  title          String
+  description    String?
+  category       String   @default("business") // business | investment | partnership | venture | process | cost_saving | research
+  status         String   @default("new") // new | evaluating | pursuing | won | parked
+  isDemo         Boolean  @default(false)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organisation Organisation @relation(fields: [organisationId], references: [id])
+  subsidiary   Subsidiary?  @relation(fields: [subsidiaryId], references: [id])
+  owner        User?        @relation(fields: [ownerId], references: [id])
+}
+
+// ---------------------------------------------------------------------------
+// Workflows
+// ---------------------------------------------------------------------------
+
+model Workflow {
+  id             String   @id @default(uuid())
+  organisationId String
+  name           String
+  description    String?
+  kind           String   @default("approval")
+  definition     String   @default("[]") // JSON array of steps [{name, approverRole, order}]
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organisation Organisation      @relation(fields: [organisationId], references: [id])
+  instances    WorkflowInstance[]
+}
+
+model WorkflowInstance {
+  id             String   @id @default(uuid())
+  organisationId String
+  workflowId     String
+  subjectType    String // e.g. "approval", "document"
+  subjectId      String
+  currentStep    Int      @default(0)
+  status         String   @default("running") // running | completed | rejected | cancelled
+  steps          String   @default("[]") // JSON array of step states
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organisation Organisation @relation(fields: [organisationId], references: [id])
+  workflow     Workflow     @relation(fields: [workflowId], references: [id])
+}
+
+// ---------------------------------------------------------------------------
+// Audit & AI governance
+// ---------------------------------------------------------------------------
+
+model AuditEvent {
+  id             String   @id @default(uuid())
+  organisationId String
+  actorId        String?
+  actorEmail     String?
+  action         String // e.g. "task.update", "decision.approve", "auth.login"
+  resourceType   String?
+  resourceId     String?
+  previousValue  String?
+  newValue       String?
+  reason         String?
+  ip             String?
+  createdAt      DateTime @default(now())
+
+  organisation Organisation @relation(fields: [organisationId], references: [id])
+
+  @@index([organisationId, createdAt])
+  @@index([actorId, createdAt])
+}
+
+model AIInteraction {
+  id             String   @id @default(uuid())
+  organisationId String
+  userId         String?
+  prompt         String
+  response       String
+  intent         String?
+  sources        String   @default("[]") // JSON array of {type, id, title}
+  confidence     String   @default("medium") // high | medium | low
+  model          String   @default("ascendium-local-v1")
+  provider       String   @default("local")
+  latencyMs      Int      @default(0)
+  createdAt      DateTime @default(now())
+
+  organisation Organisation @relation(fields: [organisationId], references: [id])
+  user         User?        @relation(fields: [userId], references: [id])
+
+  @@index([organisationId, createdAt])
+}

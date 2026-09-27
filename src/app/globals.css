@@ -1,0 +1,66 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --brand-navy-deep: hsl(217 70% 9%);
+  --brand-navy: hsl(217 66% 13%);
+  --brand-gold: hsl(45 71% 47%);
+  --brand-teal: hsl(185 55% 42%);
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  @apply bg-slate-100 text-ink antialiased;
+  font-feature-settings: "ss01", "cv11";
+}
+
+.dark body {
+  @apply bg-navy-deep text-slate-200;
+}
+
+.font-display {
+  font-family: Optima, "Iowan Old Style", Palatino, "Palatino Linotype", "Book Antiqua", Georgia, serif;
+}
+
+@layer components {
+  .card {
+    @apply rounded-xl border border-slate-200 bg-white shadow-sm;
+  }
+  .dark .card {
+    @apply border-white/10 bg-white/5;
+  }
+  .btn {
+    @apply inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors;
+  }
+  .btn-primary {
+    @apply btn bg-gold text-navy-deep hover:bg-gold/90;
+  }
+  .btn-ghost {
+    @apply btn border border-slate-300 text-slate-700 hover:bg-slate-100;
+  }
+  .dark .btn-ghost {
+    @apply border-white/15 text-slate-300 hover:bg-white/10;
+  }
+  .input {
+    @apply w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-teal focus:ring-2 focus:ring-teal/30;
+  }
+  .dark .input {
+    @apply border-white/15 bg-white/5;
+  }
+  .th {
+    @apply px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-500;
+  }
+  .dark .th {
+    @apply text-slate-400;
+  }
+  .td {
+    @apply px-3 py-2.5 text-sm;
+  }
+  .link {
+    @apply text-teal hover:underline;
+  }
+}

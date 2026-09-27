@@ -1,0 +1,16 @@
+{
+  "name": "Ascendium One",
+  "short_name": "Ascendium",
+  "description": "The institutional operating system of Ascendium Global Holdings. One institution. One intelligence layer. One operating system.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#060b1d",
+  "theme_color": "#0a1128",
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
